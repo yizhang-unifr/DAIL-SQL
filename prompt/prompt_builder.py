@@ -5,6 +5,7 @@ from prompt.PromptReprTemplate import *
 from prompt.ExampleFormatTemplate import *
 from prompt.ExampleSelectorTemplate import *
 from prompt.PromptICLTemplate import BasicICLPrompt
+from prompt.MeteoPromptRepr import MeteoSQLPrompt
 
 
 def get_repr_cls(repr_type: str):
@@ -44,6 +45,8 @@ def get_repr_cls(repr_type: str):
         repr_cls = InstructionCOTPrompt
     elif repr_type == REPR_TYPE.CBR:
         repr_cls = CBRPrompt
+    elif repr_type == REPR_TYPE.METEO:
+        repr_cls = MeteoSQLPrompt
     else:
         raise ValueError(f"{repr_type} is not supproted yet")
     return repr_cls
