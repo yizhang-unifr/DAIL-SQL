@@ -151,10 +151,10 @@ Computes geo points, OGF, entity hint, and semantic hint for every unique questi
 
 ```shell
 uv run python src/DAIL-SQL/meteo/precompute_context.py
-# outputs to data/meteo_context.json (default)
+# outputs to src/DAIL-SQL/data/meteo_context.json (default)
 ```
 
-If `--meteo-context` is not passed to `run_meteo.py`, it auto-triggers this step using `data/meteo_context.json`.
+If `--meteo-context` is not passed to `run_meteo.py`, it auto-triggers this step using `src/DAIL-SQL/data/meteo_context.json`.
 
 ---
 
@@ -205,7 +205,7 @@ uv run src/DAIL-SQL/run/run_meteo.py \
 | `--indices` | — | Comma-separated question indices, e.g. `570,573` (overrides `--end`) |
 | `--n` | `1` | SQL candidates per question |
 | `--temperature` | `0.0` | Sampling temperature |
-| `--meteo-context` | `data/meteo_context.json` | Path to precomputed context |
+| `--meteo-context` | `src/DAIL-SQL/data/meteo_context.json` | Path to precomputed context |
 | `--fewshot-path` | `src/DAIL-SQL/data/fewshot/questions.json` | Fewshot lookup file |
 | `--output-dir` | `src/DAIL-SQL/results` | Base results directory |
 | `--export-xlsx` | off | Write `report.xlsx` alongside results |

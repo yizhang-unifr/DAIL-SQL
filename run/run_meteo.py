@@ -349,7 +349,7 @@ def main() -> None:
 
     # ── resolve paths ──────────────────────────────────────────────────────────
     context_path = Path(args.meteo_context).resolve() if args.meteo_context else (
-        _PROJECT_ROOT / "data" / "meteo_context.json"
+        _DAIL_ROOT / "data" / "meteo_context.json"
     )
     fewshot_path = Path(args.fewshot_path).resolve() if args.fewshot_path else (
         _DAIL_ROOT / "data" / "fewshot" / "questions.json"

@@ -59,7 +59,7 @@ def main() -> None:
                     default=str(_DAIL_ROOT / "data" / "data_preprocess" / "test_data_point.json"),
                     help="Path to test JSON file")
     ap.add_argument("--output",
-                    default=str(_PROJECT_ROOT / "data" / "meteo_context.json"),
+                    default=str(_DAIL_ROOT / "data" / "meteo_context.json"),
                     help="Output meteo_context.json path")
     args = ap.parse_args()
 
