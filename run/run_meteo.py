@@ -340,7 +340,13 @@ def main() -> None:
     ap.add_argument("--output-dir", type=str, default="",
                     help="Base results directory (default: src/DAIL-SQL/results)")
     ap.add_argument("--export-xlsx", action="store_true")
+    ap.add_argument("--llm-config", type=str, default="",
+                    help="Path to LLM config YAML (default: config/models.yaml)")
     args = ap.parse_args()
+
+    if args.llm_config:
+        from llm.model import set_llm_config_path
+        set_llm_config_path(args.llm_config)
 
     dataset_path = Path(args.dataset).resolve() if args.dataset else (
         _DAIL_ROOT / "data" / "data_preprocess" / "test_data_point.json"

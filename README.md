@@ -209,6 +209,7 @@ uv run src/DAIL-SQL/run/run_meteo.py \
 | `--fewshot-path` | `src/DAIL-SQL/data/fewshot/questions.json` | Fewshot lookup file |
 | `--output-dir` | `src/DAIL-SQL/results` | Base results directory |
 | `--export-xlsx` | off | Write `report.xlsx` alongside results |
+| `--llm-config` | `config/models.yaml` | Path to LLM config YAML |
 
 ### Full 5-level ablation suite
 
