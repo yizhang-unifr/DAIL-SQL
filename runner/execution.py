@@ -6,17 +6,42 @@ DB_USER, DB_PORT, DB_PASS) loaded by the parent project's .env.
 """
 
 import logging
+import math
 import os
 import re
+import sys
 import time
 from decimal import Decimal
-from typing import Any, Dict, List, Union
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 import psycopg2
 from func_timeout import FunctionTimedOut, func_timeout
 
 _NUMERIC_TYPES = (int, float, Decimal)
 _EPS = 1e-6
+
+# ---------------------------------------------------------------------------
+# Gold SQL cache (optional — injected at startup by run_meteo.py)
+# ---------------------------------------------------------------------------
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_OPENSEARCH_SRC = _PROJECT_ROOT / "src" / "OpenSearch-SQL" / "src"
+if str(_OPENSEARCH_SRC) not in sys.path:
+    sys.path.insert(0, str(_OPENSEARCH_SRC))
+
+try:
+    from runner.gold_sql_cache import GoldSqlCache as _GoldSqlCache
+except ImportError:
+    _GoldSqlCache = None  # type: ignore
+
+_gold_cache: Optional[Any] = None
+
+
+def set_gold_cache(cache: Any) -> None:
+    """Inject a pre-loaded GoldSqlCache for use by all comparison calls."""
+    global _gold_cache
+    _gold_cache = cache
 
 
 def _val_approx_eq(a, b) -> bool:
@@ -163,24 +188,36 @@ def _compare_sqls_outcomes(predicted_sql: str, ground_truth_sql: str) -> int:
 
 
 def _compare_sqls_with_timing(
-    predicted_sql: str, ground_truth_sql: str
+    predicted_sql: str,
+    ground_truth_sql: str,
+    question_id: int | None = None,
 ) -> tuple[int, str, float]:
     """Execute both SQLs, compare result sets, and return (exec_res, exec_err, ves).
+
+    If a gold cache is loaded and question_id is provided, the gold result is
+    read from cache instead of re-executing ground_truth_sql.
 
     VES (Valid Efficiency Score, BIRD benchmark):
         ves = sqrt(min(t_gold / t_pred, 1.0))  if result sets are equal
         ves = 0.0                               otherwise
-
-    Returns:
-        (exec_res, exec_err, ves)
     """
-    import math
+    # --- gold result: cache first, live fallback ---
+    gold_res: set | None = None
+    t_gold: float | None = None
 
-    try:
-        gold_res, t_gold = sql_exec(ground_truth_sql)
-    except Exception as e:
-        return 0, f"gold_sql_error: {e}", 0.0
+    if _gold_cache is not None and question_id is not None:
+        gold_set = _gold_cache.get_gold_set(question_id)
+        if gold_set is not None:
+            gold_res = gold_set
+            t_gold   = _gold_cache.get_duration(question_id) or 1.0
 
+    if gold_res is None:
+        try:
+            gold_res, t_gold = sql_exec(ground_truth_sql)
+        except Exception as e:
+            return 0, f"gold_sql_error: {e}", 0.0
+
+    # --- predicted result ---
     try:
         pred_res, t_pred = sql_exec(predicted_sql)
     except Exception as e:
@@ -204,8 +241,12 @@ def compare_sqls(
     predicted_sql: str,
     ground_truth_sql: str,
     meta_time_out: int | None = None,
+    question_id: int | None = None,
 ) -> Dict[str, Union[int, str, float]]:
     """Compare predicted SQL with ground truth SQL within a timeout.
+
+    If a gold cache is loaded and question_id is provided, the cached gold
+    result is used instead of re-executing ground_truth_sql.
 
     Returns:
         Dict with 'exec_res' (1=correct, 0=incorrect), 'exec_err', and
@@ -217,7 +258,7 @@ def compare_sqls(
         res, error, ves = func_timeout(
             meta_time_out,
             _compare_sqls_with_timing,
-            args=(predicted_sql, ground_truth_sql),
+            args=(predicted_sql, ground_truth_sql, question_id),
         )
     except FunctionTimedOut:
         logging.warning("Comparison timed out.")

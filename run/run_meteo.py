@@ -235,7 +235,7 @@ def _write_summary(
     )
 
 
-def _evaluate(predicted: str, gold: str) -> tuple[int, str]:
+def _evaluate(predicted: str, gold: str, question_id: int | None = None) -> tuple[int, str]:
     """Return (1/0, error_msg). 1 = execution-equivalent."""
     try:
         from runner.database_manager import DatabaseManager
@@ -243,6 +243,7 @@ def _evaluate(predicted: str, gold: str) -> tuple[int, str]:
             predicted_sql=predicted,
             ground_truth_sql=gold,
             meta_time_out=60,
+            question_id=question_id,
         )
         exec_res = 1 if resp.get("exec_res") == 1 else 0
         exec_err = resp.get("exec_err", "")
@@ -375,6 +376,21 @@ def main() -> None:
         items = all_items
     print(f"Evaluating {len(items)} questions | ablation={args.ablation} | fewshot={args.fewshot}")
 
+    # ── load gold SQL cache ────────────────────────────────────────────────────
+    try:
+        from runner.gold_sql_cache import GoldSqlCache
+        from runner.execution import set_gold_cache
+        _dataset_stem = dataset_path.stem  # e.g. "test_data_point"
+        _cache_path = GoldSqlCache.cache_path(_PROJECT_ROOT, _dataset_stem, "meteo")
+        _cache = GoldSqlCache(_cache_path)
+        if _cache.is_loaded:
+            set_gold_cache(_cache)
+            print(f"Gold SQL cache loaded: {_cache_path} ({len(_cache._raw)} entries)")
+        else:
+            print(f"Gold SQL cache not found at {_cache_path}, falling back to live execution")
+    except Exception as e:
+        print(f"Warning: could not load gold SQL cache: {e}")
+
     # ── load context & fewshot ─────────────────────────────────────────────────
     ctx_dict: dict = {}
     if any(flags[k] for k in ("geo", "ogf", "hints", "validator")):
@@ -493,7 +509,7 @@ def main() -> None:
                     print(f"  optimizer error: {e}")
 
             # evaluate
-            exec_res, exec_err = _evaluate(final_sql, gold_sql)
+            exec_res, exec_err = _evaluate(final_sql, gold_sql, question_id=q_id)
             status = "✓" if exec_res else "✗"
             print(f"  {status} exec_res={exec_res}")
 
