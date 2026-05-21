@@ -411,7 +411,8 @@ def main() -> None:
 
     if use_optimizer:
         from pipeline.optimizer.detector import needs_optimization
-        from pipeline.optimizer.mechanical import mechanical_optimize
+        from pipeline.optimizer.mechanical import mechanical_optimize, verify_mechanical_transform
+        from pipeline.optimizer.extract_rewriter import rewrite_extract_to_range, verify_extract_rewrite
 
     # ── get model name for output path ─────────────────────────────────────────
     try:
@@ -498,12 +499,19 @@ def main() -> None:
             optimizer_error      = ""
             if use_optimizer:
                 try:
+                    # Pass 1: VALUES subquery rewrite
                     if needs_optimization(final_sql):
                         rewritten, ok = mechanical_optimize(final_sql)
-                        if ok:
+                        if ok and verify_mechanical_transform(final_sql, rewritten):
                             final_sql        = rewritten
                             optimizer_applied = True
-                            print(f"  optimizer applied")
+                    # Pass 2: EXTRACT → time range rewrite
+                    rewritten, ok = rewrite_extract_to_range(final_sql)
+                    if ok and verify_extract_rewrite(final_sql, rewritten):
+                        final_sql        = rewritten
+                        optimizer_applied = True
+                    if optimizer_applied:
+                        print(f"  optimizer applied")
                 except Exception as e:
                     optimizer_error = str(e)
                     print(f"  optimizer error: {e}")

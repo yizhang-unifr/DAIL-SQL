@@ -23,15 +23,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Path setup
+# Path setup — handled by conftest.py (DAIL-SQL root is pinned per-test)
 # ---------------------------------------------------------------------------
-
-_DAIL_SQL_ROOT = Path(__file__).resolve().parents[1]
-_OPENSEARCH_SRC = Path(__file__).resolve().parents[3] / "src" / "OpenSearch-SQL" / "src"
-
-for _p in (str(_DAIL_SQL_ROOT), str(_OPENSEARCH_SRC)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 
 # ---------------------------------------------------------------------------
@@ -46,18 +39,6 @@ def _make_mock_cache(gold_set: frozenset | None, duration: float | None):
     cache.get_duration.return_value = duration
     return cache
 
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True)
-def reset_gold_cache():
-    """Reset the module-level _gold_cache before and after every test."""
-    import runner.execution as exe
-    exe._gold_cache = None
-    yield
-    exe._gold_cache = None
 
 
 # ---------------------------------------------------------------------------
