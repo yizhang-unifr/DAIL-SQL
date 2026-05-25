@@ -27,12 +27,15 @@ _EPS = 1e-6
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _OPENSEARCH_SRC = _PROJECT_ROOT / "src" / "OpenSearch-SQL" / "src"
-if str(_OPENSEARCH_SRC) not in sys.path:
-    sys.path.insert(0, str(_OPENSEARCH_SRC))
 
 try:
-    from runner.gold_sql_cache import GoldSqlCache as _GoldSqlCache
-except ImportError:
+    import importlib.util as _ilu
+    _gold_cache_file = _OPENSEARCH_SRC / "runner" / "gold_sql_cache.py"
+    _spec = _ilu.spec_from_file_location("_opensearch_gold_sql_cache", _gold_cache_file)
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)  # type: ignore
+    _GoldSqlCache = _mod.GoldSqlCache
+except Exception:
     _GoldSqlCache = None  # type: ignore
 
 _gold_cache: Optional[Any] = None

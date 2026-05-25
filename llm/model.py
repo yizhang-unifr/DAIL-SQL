@@ -147,9 +147,17 @@ class LLMFactoryAdapter(req):
 
     @staticmethod
     def _parse_thinking(text: str) -> tuple[str, str]:
+        # Case 1: standard <think>...</think> block
         match = re.search(r"<think>(.*?)</think>\s*(.*)", text, re.DOTALL)
         if match:
             return match.group(1).strip(), match.group(2).strip()
+        # Case 2: Qwen3 via Swiss AI — outputs raw reasoning text ending with </think>
+        # but no opening <think> tag; actual answer follows after </think>
+        if "</think>" in text:
+            idx = text.rfind("</think>")
+            thinking = text[:idx].strip()
+            answer = text[idx + len("</think>"):].strip()
+            return thinking, answer
         return "", text
 
     def _get_llm(self, temperature: float | None = None):

@@ -378,8 +378,11 @@ def main() -> None:
 
     # ── load gold SQL cache ────────────────────────────────────────────────────
     try:
-        from runner.gold_sql_cache import GoldSqlCache
-        from runner.execution import set_gold_cache
+        # Import via DAIL-SQL's execution module, which already handles the
+        # OpenSearch-SQL sys.path injection internally.
+        from runner.execution import set_gold_cache, _GoldSqlCache as GoldSqlCache
+        if GoldSqlCache is None:
+            raise ImportError("runner.gold_sql_cache not available (OpenSearch-SQL path not found)")
         _dataset_stem = dataset_path.stem  # e.g. "test_data_point"
         _cache_path = GoldSqlCache.cache_path(_PROJECT_ROOT, _dataset_stem, "meteo")
         _cache = GoldSqlCache(_cache_path)
