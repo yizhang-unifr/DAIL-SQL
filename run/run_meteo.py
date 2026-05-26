@@ -416,6 +416,7 @@ def main() -> None:
         from pipeline.optimizer.detector import needs_optimization
         from pipeline.optimizer.mechanical import mechanical_optimize, verify_mechanical_transform
         from pipeline.optimizer.extract_rewriter import rewrite_extract_to_range, verify_extract_rewrite
+        from pipeline.optimizer.elevation_rewriter import rewrite_elevation_join, verify_elevation_rewrite
 
     # ── get model name for output path ─────────────────────────────────────────
     try:
@@ -513,6 +514,11 @@ def main() -> None:
                     if ok and verify_extract_rewrite(final_sql, rewritten):
                         final_sql        = rewritten
                         optimizer_applied = True
+                    # Pass 3 disabled — eligible_cells rewrite is correct but not used in inference.
+                    # rewritten, ok = rewrite_elevation_join(final_sql)
+                    # if ok and verify_elevation_rewrite(final_sql, rewritten):
+                    #     final_sql        = rewritten
+                    #     optimizer_applied = True
                     if optimizer_applied:
                         print(f"  optimizer applied")
                 except Exception as e:
