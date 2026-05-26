@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None) -> None:
     log.info("  after filtering: %d unique validated questions", len(train_df))
 
     log.info("Loading SentenceTransformer '%s' on %s …", args.model, args.device)
-    model = SentenceTransformer(args.model, device=args.device, local_files_only=True)
+    model = SentenceTransformer(args.model, device=args.device)
 
     chroma_dir.mkdir(parents=True, exist_ok=True)
     collection = build_chroma_collection(train_df, chroma_dir, model, args.rebuild)
