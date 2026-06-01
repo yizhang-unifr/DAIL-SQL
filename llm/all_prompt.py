@@ -354,7 +354,7 @@ new_extract_prompt = """/* Some extract examples are provided based on similar p
 {db_info}
 
 Attention:
-1. if the question have when\where\which, pay attention to pick table.column related to time, location and name in #columns
+1. if the question have when/where/which, pay attention to pick table.column related to time, location and name in #columns
 2. Please answer the question in the following format without any other content:
 ```
 #reason: Analysis of which columns and values might be relevant to the question. Note that when dealing with questions about time, who, which, what, etc., you should keep column related to time, names, and locations in the #column.(format: The question query xxx, the related column include table.column, the values include values)
@@ -368,7 +368,7 @@ new_extract_prompt_wofewshot = """{fewshot}
 {db_info}
 
 Attention:
-1. if the question have when\where\which, pay attention to pick table.column related to time, location and name in #columns
+1. if the question have when/where/which, pay attention to pick table.column related to time, location and name in #columns
 2. Please answer the question in the following format without any other content:
 ```
 #reason: Analysis of which columns and values might be relevant to the question. Note that when dealing with questions about time, who, which, what, etc., you should keep column related to time, names, and locations in the #column.(format: The question query xxx, the related column include table.column, the values include values)
@@ -908,7 +908,7 @@ SQL: SELECT COUNT(DISTINCT T1.orderNumber) FROM orderdetails AS T1 INNER JOIN or
 
 #Now, you need to process the question content based on the evidence and SQL:
 1. Standardize the question into a format that aligns more closely with SQL, in order to clearly reflect components: SELECT, WHERE, GROUP BY, ORDER BY, etc.
-2. provide the SQL query result set (the SELECT part in SQL, requested columns by the question), candidate columns for the question, and extract all values from the query according to the database information. Please list the query result set in the format of table.column after "#SELECT", list relevant candidate columns in the format of table.field after "#columns". List the values the question want to query after "#values". Use a comma "," to separate values and columns, and separate columns and values with a tab. The text format you will receive is ```question: {{question}}\evidence:{{define or evidence}}\nSQL:{{SQL}}\n#answer:```, and the output format you need to provide is #reason:{{why pick query, columns and values}}\n#SELECT:{{which to SELECT}}\n#columns:{{related columns}}\n#values:{{values}} #Standardization question:{{}}\n#SQL-like: SQL-like statements that ignore join conditions
+2. provide the SQL query result set (the SELECT part in SQL, requested columns by the question), candidate columns for the question, and extract all values from the query according to the database information. Please list the query result set in the format of table.column after "#SELECT", list relevant candidate columns in the format of table.field after "#columns". List the values the question want to query after "#values". Use a comma "," to separate values and columns, and separate columns and values with a tab. The text format you will receive is ```question: {{question}}\nevidence:{{define or evidence}}\nSQL:{{SQL}}\n#answer:```, and the output format you need to provide is #reason:{{why pick query, columns and values}}\n#SELECT:{{which to SELECT}}\n#columns:{{related columns}}\n#values:{{values}} #Standardization question:{{}}\n#SQL-like: SQL-like statements that ignore join conditions
 Now, you need to process the following text:
 
 #question: {question}
@@ -1020,7 +1020,7 @@ SQL: SELECT COUNT(DISTINCT T1.orderNumber) FROM orderdetails AS T1 INNER JOIN or
 
 #Now, you need to process the question content based on the evidence and SQL:
 1. Standardize the question into a format that aligns more closely with SQL, in order to clearly reflect components: SELECT, WHERE, GROUP BY, ORDER BY, etc.
-2. provide the SQL query result set (the SELECT part in SQL, requested columns by the question), candidate columns for the question, and extract all values from the query according to the database information. Please list the query result set in the format of table.column after "#SELECT", list relevant candidate columns in the format of table.field after "#columns". List the values the question want to query after "#values". Use a comma "," to separate values and columns, and separate columns and values with a tab. The text format you will receive is ```question: {{question}}\evidence:{{define or evidence}}\nSQL:{{SQL}}\n#answer:```, and the output format you need to provide is #reason:{{why pick query, columns and values}}\n#SELECT:{{which to SELECT}}\n#columns:{{related columns}}\n#values:{{values}} #Standardization:{{standardize question}} #SQL-like:{{SQL-like question}}
+2. provide the SQL query result set (the SELECT part in SQL, requested columns by the question), candidate columns for the question, and extract all values from the query according to the database information. Please list the query result set in the format of table.column after "#SELECT", list relevant candidate columns in the format of table.field after "#columns". List the values the question want to query after "#values". Use a comma "," to separate values and columns, and separate columns and values with a tab. The text format you will receive is ```question: {{question}}\nevidence:{{define or evidence}}\nSQL:{{SQL}}\n#answer:```, and the output format you need to provide is #reason:{{why pick query, columns and values}}\n#SELECT:{{which to SELECT}}\n#columns:{{related columns}}\n#values:{{values}} #Standardization:{{standardize question}} #SQL-like:{{SQL-like question}}
 Now, you need to process the following text:
 
 #question: {question}
@@ -1029,37 +1029,5 @@ SQL: {sql}
 """
 
 
-select_prompt="""现在我们定义一个问句的语法原子单元如下:
-Q: 询问词: 如 calculate\ Include\ List\ List out\ List all\ give\ state\ Name\ In which\ How many\  which\ what\ who\ when\ provide\ Tally\ identify\ Find\ mention\ write等
-J: 判断词： 如 Do\ Did\ If\ Is\ Are等
-I: 查询内容: 查询的主体内容, 如: name, ID, date, location, item, biggest city.
-C: 条件句: 通过介词和连词引入的查询的要求或属性, 如大于、等于、排序、聚合等. 介词和连词有: of\ have\ with\ that\ by. 条件句的形式例子有: with condition\ have condition\ of attribute\ that was condition
-
-
-一个问题通过这些原子串联起来。常见的串联方式有
-QIC(询问句): List the student with score more than 80: Q: 'List' I: 'the student' C: 'with score more than 80'
-JC(判断句): State if Tom is a Cat? : J: 'State if C: is a Cat?'
-C(条件句): For all people in Beijing
-现在请你针对下面的问题, 把问题中的内容按照上述原子定义提取出来
-问题如下: {question}
-
-请按照下面的json格式进行回答:
-
-```json
-[{{"Type":"类型(QIC,JC,C)",
-"Extract":{{//不存在的填null
-    "Q":"询问词",
-    "J":"判断词",
-    "I":['查询内容a', '查询内容b'],//只有查询内容用and或alongside连接时,才分成多个实体填入List
-    "C":["条件句a","属性b"]
-}}}},
-{{}}]
-```"""
-
-vote_prompt="""现在有问题如下:
-#question: {question}
-对应这个问题有如下几个SQL,请你从中选择最接近问题要求的SQL:
-{sql}
-
-请在上面的几个SQL中选择最符合题目要求的SQL, 不要回复其他内容:
-#SQL:"""
+select_prompt = ""
+vote_prompt = ""
