@@ -235,7 +235,7 @@ def _write_summary(
     )
 
 
-def _evaluate(predicted: str, gold: str, question_id: int | None = None) -> tuple[int, str]:
+def _evaluate(predicted: str, gold: str, question: str | None = None) -> tuple[int, str]:
     """Return (1/0, error_msg). 1 = execution-equivalent."""
     try:
         from runner.database_manager import DatabaseManager
@@ -243,7 +243,7 @@ def _evaluate(predicted: str, gold: str, question_id: int | None = None) -> tupl
             predicted_sql=predicted,
             ground_truth_sql=gold,
             meta_time_out=60,
-            question_id=question_id,
+            question=question,
         )
         exec_res = 1 if resp.get("exec_res") == 1 else 0
         exec_err = resp.get("exec_err", "")
@@ -546,7 +546,7 @@ def main() -> None:
                     print(f"  optimizer error: {e}")
 
             # evaluate
-            exec_res, exec_err = _evaluate(final_sql, gold_sql, question_id=q_id)
+            exec_res, exec_err = _evaluate(final_sql, gold_sql, question=question)
             status = "✓" if exec_res else "✗"
             print(f"  {status} exec_res={exec_res}")
 

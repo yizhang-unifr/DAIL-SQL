@@ -193,26 +193,26 @@ def _compare_sqls_outcomes(predicted_sql: str, ground_truth_sql: str) -> int:
 def _compare_sqls_with_timing(
     predicted_sql: str,
     ground_truth_sql: str,
-    question_id: int | None = None,
+    question: str | None = None,
 ) -> tuple[int, str, float]:
     """Execute both SQLs, compare result sets, and return (exec_res, exec_err, ves).
 
-    If a gold cache is loaded and question_id is provided, the gold result is
-    read from cache instead of re-executing ground_truth_sql.
+    If a gold cache is loaded and question text is provided, the gold result is
+    looked up by question text (stable across question_id reshuffles/resamples).
 
     VES (Valid Efficiency Score, BIRD benchmark):
         ves = sqrt(min(t_gold / t_pred, 1.0))  if result sets are equal
         ves = 0.0                               otherwise
     """
-    # --- gold result: cache first, live fallback ---
+    # --- gold result: cache by question text first, live fallback ---
     gold_res: set | None = None
     t_gold: float | None = None
 
-    if _gold_cache is not None and question_id is not None:
-        gold_set = _gold_cache.get_gold_set(question_id)
+    if _gold_cache is not None and question:
+        gold_set = _gold_cache.get_gold_set_by_question(question)
         if gold_set is not None:
             gold_res = gold_set
-            t_gold   = _gold_cache.get_duration(question_id) or 1.0
+            t_gold   = _gold_cache.get_duration_by_question(question) or 1.0
 
     if gold_res is None:
         try:
@@ -244,12 +244,13 @@ def compare_sqls(
     predicted_sql: str,
     ground_truth_sql: str,
     meta_time_out: int | None = None,
-    question_id: int | None = None,
+    question: str | None = None,
+    question_id: int | None = None,  # kept for backward compat, unused
 ) -> Dict[str, Union[int, str, float]]:
     """Compare predicted SQL with ground truth SQL within a timeout.
 
-    If a gold cache is loaded and question_id is provided, the cached gold
-    result is used instead of re-executing ground_truth_sql.
+    If a gold cache is loaded and question text is provided, the cached gold
+    result is looked up by question text (stable across resamples).
 
     Returns:
         Dict with 'exec_res' (1=correct, 0=incorrect), 'exec_err', and
@@ -261,7 +262,7 @@ def compare_sqls(
         res, error, ves = func_timeout(
             meta_time_out,
             _compare_sqls_with_timing,
-            args=(predicted_sql, ground_truth_sql, question_id),
+            args=(predicted_sql, ground_truth_sql, question),
         )
     except FunctionTimedOut:
         logging.warning("Comparison timed out.")

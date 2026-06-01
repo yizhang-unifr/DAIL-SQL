@@ -53,10 +53,11 @@ class DatabaseManager:
 
     @staticmethod
     def compare_sqls(predicted_sql: str, ground_truth_sql: str,
-                     meta_time_out: int = 180, question_id: int | None = None):
+                     meta_time_out: int = 180, question: str | None = None,
+                     question_id: int | None = None):
         return compare_sqls(
             predicted_sql=predicted_sql,
             ground_truth_sql=ground_truth_sql,
             meta_time_out=meta_time_out,
-            question_id=question_id,
+            question=question,
         )
