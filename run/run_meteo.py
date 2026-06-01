@@ -269,7 +269,9 @@ def _export_xlsx(records: list[dict], out_path: Path, ablation: str, model_name:
     ws = wb.active
     ws.title = "Results"
     headers = ["#", "question_id", "category", "question",
-               "gold_sql", "predicted_sql", "exec_res", "exec_err"]
+               "gold_sql", "predicted_sql", "exec_res", "exec_err",
+               "gen calls", "gen total (ms)", "gen min (ms)", "gen max (ms)",
+               "gen avg (ms)", "in tok", "out tok"]
     hdr_fill = PatternFill("solid", fgColor="4472C4")
     hdr_font = Font(bold=True, color="FFFFFF")
     for col, hdr in enumerate(headers, 1):
@@ -282,10 +284,15 @@ def _export_xlsx(records: list[dict], out_path: Path, ablation: str, model_name:
     red   = PatternFill("solid", fgColor="FFC7CE")
     for i, rec in enumerate(records, 1):
         row = i + 1
+        gs = rec.get("gen_stats") or {}
         values = [
             i, rec.get("question_id", i - 1), rec.get("category", ""),
             rec["question"], rec["gold_sql"], rec["predicted_sql"],
             rec["exec_res"], rec.get("exec_err", ""),
+            gs.get("n_calls", ""),
+            gs.get("total_duration_ms", ""), gs.get("min_duration_ms", ""),
+            gs.get("max_duration_ms", ""), gs.get("avg_duration_ms", ""),
+            gs.get("total_input_tokens", ""), gs.get("total_output_tokens", ""),
         ]
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
@@ -304,12 +311,25 @@ def _export_xlsx(records: list[dict], out_path: Path, ablation: str, model_name:
     total = len(records)
     correct = sum(r["exec_res"] for r in records)
     ex = correct / total if total else 0.0
+
+    def _gs(rec):
+        return rec.get("gen_stats") or {}
+
+    total_in_tok  = sum(_gs(r).get("total_input_tokens")  or 0 for r in records)
+    total_out_tok = sum(_gs(r).get("total_output_tokens") or 0 for r in records)
+    total_gen_ms  = sum(_gs(r).get("total_duration_ms")   or 0 for r in records)
+    total_gen_wall = sum(r.get("gen_elapsed_s") or 0 for r in records)
+
     for row, (k, v) in enumerate([
         ("Model",   model_name),
         ("Ablation", ablation),
         ("Total",    total),
         ("Correct",  correct),
         ("EX",       f"{ex:.1%}"),
+        ("Total input tokens",  total_in_tok),
+        ("Total output tokens", total_out_tok),
+        ("Total gen LLM (ms)",  round(total_gen_ms, 1)),
+        ("Total gen wall (s)",  round(total_gen_wall, 1)),
     ], 1):
         ws2.cell(row=row, column=1, value=k).font = Font(bold=True)
         ws2.cell(row=row, column=2, value=v)
@@ -466,7 +486,7 @@ def main() -> None:
 
             # generate candidates
             t0 = time.time()
-            candidates_raw = generate_candidates(prompt, n=args.n, temperature=args.temperature)
+            candidates_raw, gen_stats = generate_candidates(prompt, n=args.n, temperature=args.temperature)
             elapsed = time.time() - t0
             candidates = [_clean_sql(c) for c in candidates_raw if c.strip()]
             if not candidates:
@@ -541,6 +561,8 @@ def main() -> None:
                 "predicted_sql": final_sql,
                 "exec_res":      exec_res,
                 "exec_err":      exec_err,
+                "gen_elapsed_s": round(elapsed, 3),
+                "gen_stats":     gen_stats,
             }
             records.append(rec)
 
@@ -610,6 +632,8 @@ def main() -> None:
                     "final_sql":          final_sql,
                     "exec_res":           exec_res,
                     "exec_err":           exec_err,
+                    "gen_elapsed_s":      round(elapsed, 3),
+                    "gen_stats":          gen_stats,
                 }, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )

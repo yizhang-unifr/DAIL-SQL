@@ -31,11 +31,18 @@ def generate_candidates(
     prompt: str,
     n: int = 1,
     temperature: float = 0.0,
-) -> list[str]:
-    """Generate n SQL candidates. Returns list of SQL strings (think blocks stripped)."""
+) -> tuple[list[str], dict]:
+    """Generate n SQL candidates.
+
+    Returns ``(candidates, gen_stats)`` where *candidates* is a list of SQL strings
+    (think blocks stripped) and *gen_stats* is the per-phase timing/token blob from
+    the adapter (see ``LLMFactoryAdapter._build_stats``).
+    """
     adapter = get_adapter()
     if n == 1:
-        result = adapter.get_ans(prompt, temperature=temperature)
-        return [result]
-    choices = adapter.get_ans(prompt, temperature=temperature, n=n, single=False)
-    return [c["message"]["content"] for c in choices]
+        result, stats = adapter.get_ans(prompt, temperature=temperature, return_stats=True)
+        return [result], stats
+    choices, stats = adapter.get_ans(
+        prompt, temperature=temperature, n=n, single=False, return_stats=True
+    )
+    return [c["message"]["content"] for c in choices], stats
