@@ -244,7 +244,10 @@ class LLMFactoryAdapter(req):
         system_base = "You are an SQL expert, skilled in handling various SQL-related issues."
         enable_thinking = self._base_config.get("enable_thinking", False)
         system_content = system_base if enable_thinking else f"{system_base} /no_think"
-        return [SystemMessage(content=system_content), HumanMessage(content=prompt_text)]
+        user_content = prompt_text
+        if not enable_thinking:
+            user_content = prompt_text + "\nAnswer directly, without thinking through the process."
+        return [SystemMessage(content=system_content), HumanMessage(content=user_content)]
 
     def get_ans(self, messages: str, temperature: float = 0.0, top_p: float | None = None,
                 n: int = 1, single: bool = True, debug: bool = False,
@@ -269,9 +272,13 @@ class LLMFactoryAdapter(req):
                     duration_ms = round((time.time() - _t0) * 1000, 1)
                     usage = _extract_usage(result)
                     thinking, response_clean = self._parse_thinking(result.content)
+                    enable_thinking = self._base_config.get("enable_thinking", False)
                     call_info = {**model_info, **usage}
                     if thinking:
-                        call_info["thinking"] = thinking
+                        if enable_thinking:
+                            call_info["thinking"] = thinking
+                        else:
+                            call_info["unexpected_thinking"] = thinking
                     if self.step != "prepare_train_queries":
                         self.log_record(messages, response_clean, duration_ms=duration_ms, model_info=call_info)
                     stats = _build_stats([{"duration_ms": duration_ms, **usage}], duration_ms)
@@ -279,11 +286,15 @@ class LLMFactoryAdapter(req):
                 else:
                     choices = self._generate_n(llm, chat_msgs, n)
                     total_ms = round((time.time() - _t0) * 1000, 1)
+                    enable_thinking = self._base_config.get("enable_thinking", False)
                     for c in choices:
                         thinking, answer = self._parse_thinking(c["message"]["content"])
                         c["message"]["content"] = answer
                         if thinking:
-                            c["thinking"] = thinking
+                            if enable_thinking:
+                                c["thinking"] = thinking
+                            else:
+                                c["unexpected_thinking"] = thinking
                     if self.step != "prepare_train_queries":
                         # one call-log file per choice (per-call duration + tokens)
                         for c in choices:
@@ -293,6 +304,8 @@ class LLMFactoryAdapter(req):
                                   "total_tokens": c.get("total_tokens")}
                             if c.get("thinking"):
                                 ci["thinking"] = c["thinking"]
+                            if c.get("unexpected_thinking"):
+                                ci["unexpected_thinking"] = c["unexpected_thinking"]
                             try:
                                 Logger().log_llm_call(self.step, messages, c["message"]["content"],
                                                       duration_ms=c.get("duration_ms"), model_info=ci)
