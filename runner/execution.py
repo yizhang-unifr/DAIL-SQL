@@ -18,6 +18,12 @@ from typing import Any, Dict, List, Optional, Union
 import psycopg2
 from func_timeout import FunctionTimedOut, func_timeout
 
+# Default SQL statement timeout in seconds (overridable via SQL_STATEMENT_TIMEOUT env var).
+_DEFAULT_STATEMENT_TIMEOUT_S = 600
+# Default comparison timeout in seconds (overridable via SQL_COMPARE_TIMEOUT env var).
+# Gold SQL is served from cache, so this only needs to cover predicted SQL + overhead.
+_DEFAULT_COMPARE_TIMEOUT_S = _DEFAULT_STATEMENT_TIMEOUT_S + 60
+
 _NUMERIC_TYPES = (int, float, Decimal)
 _EPS = 1e-6
 
@@ -96,7 +102,7 @@ def _results_approx_equal(pred_res: set, gold_res: set) -> bool:
 
 def _sql_statement_timeout_ms() -> int:
     """Read SQL_STATEMENT_TIMEOUT from env (seconds) and return milliseconds."""
-    return int(os.environ.get("SQL_STATEMENT_TIMEOUT", "30")) * 1000
+    return int(os.environ.get("SQL_STATEMENT_TIMEOUT", str(_DEFAULT_STATEMENT_TIMEOUT_S))) * 1000
 
 
 def _get_pg_connection(statement_timeout_ms: int | None = None):
@@ -257,7 +263,7 @@ def compare_sqls(
         'ves' (Valid Efficiency Score per BIRD benchmark).
     """
     if meta_time_out is None:
-        meta_time_out = int(os.environ.get("SQL_COMPARE_TIMEOUT", "60"))
+        meta_time_out = int(os.environ.get("SQL_COMPARE_TIMEOUT", str(_DEFAULT_COMPARE_TIMEOUT_S)))
     try:
         res, error, ves = func_timeout(
             meta_time_out,

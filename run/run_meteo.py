@@ -187,7 +187,7 @@ def build_prompt(
         if sh := ctx.get("semantic_hint", ""):
             blocks.append(sh.rstrip())
 
-    blocks.append(f"/* Answer the following: {question} */\nSELECT ")
+    blocks.append(f"/* Answer the following: {question} */\n/* IMPORTANT: Output ONLY a valid SQL statement. Do NOT compute or guess the answer directly. */")
     return "\n\n".join(blocks)
 
 
