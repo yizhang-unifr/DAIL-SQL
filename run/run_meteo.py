@@ -72,6 +72,9 @@ CREATE TABLE meteo_tp (
 CREATE TABLE meteo_sdmax (
     time TIMESTAMP, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, sdmax REAL
 );
+CREATE TABLE meteo_ssrd (
+    time TIMESTAMP, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, ssrd DOUBLE PRECISION
+);
 CREATE TABLE meteo_elevation (
     latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, elevation REAL
 );
@@ -84,7 +87,6 @@ CREATE TABLE landcover_upscaled (
     latitude DOUBLE PRECISION, longitude DOUBLE PRECISION,
     ranks INTEGER[][]
     -- ranks[i][1] = level3_code, ranks[i][2] = pixel_count
-    -- iterate with: CROSS JOIN LATERAL GENERATE_SUBSCRIPTS(ranks, 1) AS i
 );"""
 
 _SCHEMA_BLOCK = f"/* Given the following database schema: */\n{_METEO_DDL}"
