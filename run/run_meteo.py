@@ -87,6 +87,7 @@ CREATE TABLE landcover_upscaled (
     latitude DOUBLE PRECISION, longitude DOUBLE PRECISION,
     ranks INTEGER[][]
     -- ranks[i][1] = level3_code, ranks[i][2] = pixel_count
+    -- iterate with: CROSS JOIN LATERAL GENERATE_SUBSCRIPTS(ranks, 1) AS i
 );"""
 
 _SCHEMA_BLOCK = f"/* Given the following database schema: */\n{_METEO_DDL}"
