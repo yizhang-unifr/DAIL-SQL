@@ -532,11 +532,13 @@ def main() -> None:
                         if ok and verify_mechanical_transform(final_sql, rewritten):
                             final_sql        = rewritten
                             optimizer_applied = True
-                    # Pass 2: EXTRACT → time range rewrite
-                    rewritten, ok = rewrite_extract_to_range(final_sql)
-                    if ok and verify_extract_rewrite(final_sql, rewritten):
-                        final_sql        = rewritten
-                        optimizer_applied = True
+                    # Pass 2 disabled — era5_land2 has a function-based composite index
+                    # idx_tmean_round_latlon_ym covering EXTRACT(YEAR) and EXTRACT(MONTH).
+                    # Rewriting to a raw-time range loses that index component (180x cost increase).
+                    # rewritten, ok = rewrite_extract_to_range(final_sql)
+                    # if ok and verify_extract_rewrite(final_sql, rewritten):
+                    #     final_sql        = rewritten
+                    #     optimizer_applied = True
                     # Pass 3 disabled — eligible_cells rewrite is correct but not used in inference.
                     # rewritten, ok = rewrite_elevation_join(final_sql)
                     # if ok and verify_elevation_rewrite(final_sql, rewritten):
