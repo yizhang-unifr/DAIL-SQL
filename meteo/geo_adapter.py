@@ -49,7 +49,6 @@ def format_geo_block(points: list[dict], mode: str = "points") -> str:
         n = len(points)
         return (
             f"/* Geographic filter — {n} coordinate pairs (DO NOT add, remove, or modify any).\n"
-            f"   Always use ROUND(CAST(latitude AS DECIMAL), 1) and ROUND(CAST(longitude AS DECIMAL), 1) for matching.\n"
             f"   Copy ALL {n} pairs below EXACTLY into your IN clause:\n"
             f"   (ROUND(CAST(latitude AS DECIMAL), 1), ROUND(CAST(longitude AS DECIMAL), 1)) IN ({coords}) */\n"
         )
@@ -58,7 +57,6 @@ def format_geo_block(points: list[dict], mode: str = "points") -> str:
         lons = [float(p["lon"]) for p in points]
         return (
             f"/* Geographic filter (bbox mode) — coordinates are rounded to 1 decimal place.\n"
-            f"   Always use ROUND(CAST(latitude AS DECIMAL), 1) and ROUND(CAST(longitude AS DECIMAL), 1) for matching.\n"
             f"   ROUND(CAST(latitude AS DECIMAL), 1) BETWEEN {min(lats)} AND {max(lats)}\n"
             f"   ROUND(CAST(longitude AS DECIMAL), 1) BETWEEN {min(lons)} AND {max(lons)} */\n"
         )
