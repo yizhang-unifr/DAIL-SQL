@@ -164,6 +164,7 @@ def build_prompt(
     ctx: dict,
     flags: dict,
     fewshot_prompt: str,
+    geo_anchor: str = "points",
 ) -> str:
     """Assemble the full DAIL-SQL style prompt."""
     blocks: list[str] = [_SCHEMA_BLOCK]
@@ -174,7 +175,7 @@ def build_prompt(
     if flags["geo"]:
         pts = ctx.get("geo_points", [])
         if pts:
-            blocks.append(format_geo_block(pts, mode="points").rstrip())
+            blocks.append(format_geo_block(pts, mode=geo_anchor).rstrip())
 
     if flags["ogf"]:
         ogf_block = _format_ogf_block(ctx.get("ogf_json", ""))
@@ -366,6 +367,8 @@ def main() -> None:
     ap.add_argument("--export-xlsx", action="store_true")
     ap.add_argument("--llm-config", type=str, default="",
                     help="Path to LLM config YAML (default: config/models.yaml)")
+    ap.add_argument("--geo-anchor", default="points", choices=["points", "bbox"],
+                    help="Geo block mode (default: points)")
     args = ap.parse_args()
 
     if args.llm_config:
@@ -485,7 +488,7 @@ def main() -> None:
                 fewshot_prompt = fewshot_dict.get(q_key, {}).get("prompt", "")
 
             # build prompt
-            prompt = build_prompt(question, ctx, flags, fewshot_prompt)
+            prompt = build_prompt(question, ctx, flags, fewshot_prompt, geo_anchor=args.geo_anchor)
 
             # generate candidates
             t0 = time.time()
