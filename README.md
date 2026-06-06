@@ -188,6 +188,7 @@ uv run src/DAIL-SQL/run/run_meteo.py \
 # Bbox variant
 uv run src/DAIL-SQL/run/run_meteo.py \
     --dataset src/DAIL-SQL/data/data_preprocess/test_data_bbox.json \
+    --geo-anchor bbox \
     --ablation full \
     --fewshot \
     --end -1 \
@@ -210,6 +211,7 @@ uv run src/DAIL-SQL/run/run_meteo.py \
 | `--output-dir` | `src/DAIL-SQL/results` | Base results directory |
 | `--export-xlsx` | off | Write `report.xlsx` alongside results |
 | `--llm-config` | `config/models.yaml` | Path to LLM config YAML |
+| `--geo-anchor` | `points` | Geo block mode: `points` (IN clause) or `bbox` (BETWEEN range) |
 
 ### Full 5-level ablation suite
 
