@@ -1,7 +1,11 @@
 """Meteo semantic hint: classify question access pattern → SQL guidance block."""
 from __future__ import annotations
 
-# (name, trigger_keywords, hint_text) — checked in order; first match wins
+# (name, trigger_keywords, hint_text) — checked in order; first match wins.
+# Note: spatial_extreme is intentionally absent. Questions asking for a max/min
+# value vs. the location of that value are ambiguous and cannot be reliably
+# distinguished by keyword matching. OpenSearch-SQL does not inject a comparable
+# hint for these patterns, so we omit it here to keep the two systems aligned.
 _PATTERNS: list[tuple[str, frozenset[str], str]] = [
     (
         "landcover_dominant",
@@ -38,14 +42,6 @@ _PATTERNS: list[tuple[str, frozenset[str], str]] = [
                    "exceeded", "warm days", "hot days", "cold days",
                    "frost days", "heat days"}),
         "Pattern: threshold_count — use COUNT(*) WHERE col > threshold.",
-    ),
-    (
-        "spatial_extreme",
-        frozenset({"highest", "lowest", "maximum", "minimum", "where has",
-                   "which location", "which city", "which region",
-                   "coordinates of", "hottest location", "coldest location"}),
-        "Pattern: spatial_extreme — SELECT latitude, longitude WHERE col = "
-        "(SELECT MAX/MIN(col) FROM ... WHERE ...); use a correlated subquery.",
     ),
     (
         "seasonal_pattern",

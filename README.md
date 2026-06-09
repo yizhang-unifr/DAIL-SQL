@@ -84,7 +84,8 @@ flowchart TD
 | `meteo/meteo_semantic_hint.py` | Classifies question into access pattern and injects SQL guidance |
 | `meteo/llm_adapter.py` | Wraps `LLMFactoryAdapter` — any provider, `<think>` stripping, parallel n-candidate generation |
 | `meteo/precompute_context.py` | One-time offline script that produces `meteo_context.json` |
-| `run/run_meteo.py` | End-to-end runner: prompt build → LLM → validate → optimize → EX eval → XLSX |
+| `run/run_meteo.py` | End-to-end runner: prompt build → LLM → validate → optimize → EX + VES eval → XLSX |
+| `run/rerun_eval.py` | Post-hoc re-evaluation: re-executes predicted SQLs from any completed run to measure DB runtime and VES without repeating LLM inference |
 | `runner/` | Local copy of PostgreSQL execution utilities |
 | `llm/` | Local copy of LLM adapter and prompt classes (self-contained) |
 | `scripts/preprocess_test_data.py` | Converts `test_data.xlsx` → `data/data_preprocess/*.json` |
@@ -227,6 +228,90 @@ done
 
 ---
 
+## Post-hoc VES & DB Runtime Measurement
+
+New runs (via `run_meteo.py`) automatically compute VES and DB runtime inline. For **existing runs** that predate this feature, use `run/rerun_eval.py` to replay the predicted SQLs against the database and compute the missing metrics.
+
+### What `rerun_eval.py` does
+
+- Reads `results.jsonl` from a completed run directory (skips LLM inference entirely).
+- Re-executes each predicted SQL against PostgreSQL and measures wall-clock DB time (`db_runtime_s`).
+- Looks up gold execution time from the shared gold SQL cache; falls back to live execution if not cached.
+- Computes VES per question: `ves = sqrt(min(t_gold / t_pred, 1.0))` — same formula as OpenSearch-SQL.
+- Re-verifies EX from scratch (results may differ from the original run if a query previously timed out).
+- Writes two new files into the run directory: `eval_rerun.json` and `report_rerun.xlsx` (never overwrites originals).
+
+### Usage
+
+```shell
+# Re-evaluate a single run directory
+uv run src/DAIL-SQL/run/rerun_eval.py \
+    --run-dir src/DAIL-SQL/results/qwen.qwen3-next-80b-a3b/full/fewshot/20260606_140137
+
+# Re-evaluate all complete runs under a model directory
+uv run src/DAIL-SQL/run/rerun_eval.py \
+    --model-dir src/DAIL-SQL/results/qwen.qwen3-next-80b-a3b
+
+# Tune parallelism and per-query timeout
+uv run src/DAIL-SQL/run/rerun_eval.py \
+    --run-dir src/DAIL-SQL/results/qwen.qwen3-next-80b-a3b/full/fewshot/20260606_140137 \
+    --workers 8 \
+    --timeout 90
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--run-dir` | — | Single run directory to re-evaluate (mutually exclusive with `--model-dir`) |
+| `--model-dir` | — | Re-evaluate all complete runs found recursively under this directory |
+| `--workers` | `4` | Parallel DB connections (ThreadPoolExecutor) |
+| `--timeout` | `60` | Per-query timeout in seconds |
+
+### Outputs
+
+`eval_rerun.json` — aggregate stats plus per-question detail:
+
+```json
+{
+  "summary": {
+    "EX": 0.4628,
+    "EX_orig": 0.4560,
+    "EX_delta": 0.0068,
+    "n_ex_changed": 5,
+    "VES": 0.3841,
+    "db_runtime_s": { "min": 0.12, "mean": 2.34, "max": 31.5, "total": 1760.0 }
+  },
+  "per_question": [
+    {
+      "question_id": 0,
+      "exec_res": 1,
+      "exec_res_orig": 1,
+      "exec_changed": false,
+      "ves": 0.4123,
+      "db_runtime_s": 1.82,
+      "t_gold_s": 0.31,
+      "gold_in_cache": true
+    }
+  ]
+}
+```
+
+`report_rerun.xlsx` — original columns plus `exec_res_rerun`, `exec_res_orig`, `exec_changed`, `ves`, `db_runtime_s`, `t_gold_s`, `gold_in_cache`; rows colour-coded green (correct), orange (incorrect), yellow (EX changed vs original run).
+
+### VES formula
+
+Both inline (new runs) and post-hoc (rerun) use:
+
+```
+VES = sqrt( min( t_gold / t_pred, 1.0 ) )   if exec_res == 1
+    = 0.0                                    otherwise
+```
+
+This matches the formula used by OpenSearch-SQL in `runner/execution.py`. Note: the original BIRD paper does not cap `t_gold / t_pred` at 1.0 and averages over 100 executions; our version runs once per query and caps at 1.0 for internal consistency.
+
+---
+
 ## Results Directory Layout
 
 ```text
@@ -235,10 +320,12 @@ src/DAIL-SQL/results/
     ├── full/
     │   ├── fewshot/
     │   │   └── 20260519_120000/
-    │   │       ├── predictions.txt
-    │   │       ├── results.jsonl
-    │   │       ├── summary.json
-    │   │       ├── report.xlsx
+    │   │       ├── predictions.txt      # one predicted SQL per line
+    │   │       ├── results.jsonl        # per-question: exec_res, ves, db_runtime_s, gen timing
+    │   │       ├── summary.json         # EX, VES, db_runtime_s stats, complete flag
+    │   │       ├── report.xlsx          # EX + VES + DB runtime columns
+    │   │       ├── eval_rerun.json      # present after rerun_eval.py (re-verified EX + VES)
+    │   │       ├── report_rerun.xlsx    # present after rerun_eval.py
     │   │       └── llm_io/
     │   └── no_fewshot/
     ├── baseline/

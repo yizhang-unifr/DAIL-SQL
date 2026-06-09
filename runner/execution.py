@@ -200,8 +200,8 @@ def _compare_sqls_with_timing(
     predicted_sql: str,
     ground_truth_sql: str,
     question: str | None = None,
-) -> tuple[int, str, float]:
-    """Execute both SQLs, compare result sets, and return (exec_res, exec_err, ves).
+) -> tuple[int, str, float, float | None]:
+    """Execute both SQLs, compare result sets, and return (exec_res, exec_err, ves, t_pred).
 
     If a gold cache is loaded and question text is provided, the gold result is
     looked up by question text (stable across question_id reshuffles/resamples).
@@ -224,13 +224,13 @@ def _compare_sqls_with_timing(
         try:
             gold_res, t_gold = sql_exec(ground_truth_sql)
         except Exception as e:
-            return 0, f"gold_sql_error: {e}", 0.0
+            return 0, f"gold_sql_error: {e}", 0.0, None
 
     # --- predicted result ---
     try:
         pred_res, t_pred = sql_exec(predicted_sql)
     except Exception as e:
-        return 0, str(e), 0.0
+        return 0, str(e), 0.0, None
 
     correct = int(pred_res == gold_res or _results_approx_equal(pred_res, gold_res))
     error = "--" if correct else "incorrect answer"
@@ -243,7 +243,7 @@ def _compare_sqls_with_timing(
     else:
         ves = 0.0
 
-    return correct, error, ves
+    return correct, error, ves, t_pred
 
 
 def compare_sqls(
@@ -264,8 +264,9 @@ def compare_sqls(
     """
     if meta_time_out is None:
         meta_time_out = int(os.environ.get("SQL_COMPARE_TIMEOUT", str(_DEFAULT_COMPARE_TIMEOUT_S)))
+    t_pred: float | None = None
     try:
-        res, error, ves = func_timeout(
+        res, error, ves, t_pred = func_timeout(
             meta_time_out,
             _compare_sqls_with_timing,
             args=(predicted_sql, ground_truth_sql, question),
@@ -280,7 +281,7 @@ def compare_sqls(
         error = str(e)
         res = 0
         ves = 0.0
-    return {"exec_res": res, "exec_err": error, "ves": ves}
+    return {"exec_res": res, "exec_err": error, "ves": ves, "db_runtime_s": t_pred}
 
 
 def validate_sql_query(sql: str, max_returned_rows: int = 30) -> Dict[str, Any]:

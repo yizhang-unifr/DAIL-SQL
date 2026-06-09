@@ -222,8 +222,9 @@ def _write_summary(
     total: int,
     correct: int,
     complete: bool,
+    records: list[dict] | None = None,
 ) -> None:
-    summary = {
+    summary: dict = {
         "ablation":        args.ablation,
         "model":           model_short,
         "fewshot":         args.fewshot,
@@ -234,13 +235,25 @@ def _write_summary(
         "timestamp":       timestamp,
         "complete":        complete,
     }
+    if records:
+        ves_vals     = [r["ves"] for r in records if "ves" in r]
+        db_vals      = [r["db_runtime_s"] for r in records if r.get("db_runtime_s") is not None]
+        if ves_vals:
+            summary["VES"] = round(sum(ves_vals) / len(ves_vals), 4)
+        if db_vals:
+            summary["db_runtime_s"] = {
+                "min":   round(min(db_vals), 4),
+                "mean":  round(sum(db_vals) / len(db_vals), 4),
+                "max":   round(max(db_vals), 4),
+                "total": round(sum(db_vals), 4),
+            }
     (run_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False)
     )
 
 
-def _evaluate(predicted: str, gold: str, question: str | None = None) -> tuple[int, str]:
-    """Return (1/0, error_msg). 1 = execution-equivalent."""
+def _evaluate(predicted: str, gold: str, question: str | None = None) -> tuple[int, str, float, float | None]:
+    """Return (exec_res, exec_err, ves, db_runtime_s)."""
     try:
         from runner.database_manager import DatabaseManager
         resp = DatabaseManager.compare_sqls(
@@ -249,12 +262,16 @@ def _evaluate(predicted: str, gold: str, question: str | None = None) -> tuple[i
             meta_time_out=60,
             question=question,
         )
-        exec_res = 1 if resp.get("exec_res") == 1 else 0
-        exec_err = resp.get("exec_err", "")
+        exec_res   = 1 if resp.get("exec_res") == 1 else 0
+        exec_err   = resp.get("exec_err", "")
+        ves        = resp.get("ves", 0.0) or 0.0
+        db_runtime = resp.get("db_runtime_s")
     except Exception as e:
-        exec_res = 0
-        exec_err = str(e)
-    return exec_res, exec_err
+        exec_res   = 0
+        exec_err   = str(e)
+        ves        = 0.0
+        db_runtime = None
+    return exec_res, exec_err, ves, db_runtime
 
 
 # ─── XLSX export ──────────────────────────────────────────────────────────────
@@ -274,6 +291,7 @@ def _export_xlsx(records: list[dict], out_path: Path, ablation: str, model_name:
     ws.title = "Results"
     headers = ["#", "question_id", "category", "question",
                "gold_sql", "predicted_sql", "exec_res", "exec_err",
+               "ves", "db_runtime_s",
                "gen calls", "gen total (ms)", "gen min (ms)", "gen max (ms)",
                "gen avg (ms)", "in tok", "out tok"]
     hdr_fill = PatternFill("solid", fgColor="4472C4")
@@ -293,6 +311,7 @@ def _export_xlsx(records: list[dict], out_path: Path, ablation: str, model_name:
             i, rec.get("question_id", i - 1), rec.get("category", ""),
             rec["question"], rec["gold_sql"], rec["predicted_sql"],
             rec["exec_res"], rec.get("exec_err", ""),
+            rec.get("ves", ""), rec.get("db_runtime_s", ""),
             gs.get("n_calls", ""),
             gs.get("total_duration_ms", ""), gs.get("min_duration_ms", ""),
             gs.get("max_duration_ms", ""), gs.get("avg_duration_ms", ""),
@@ -319,21 +338,34 @@ def _export_xlsx(records: list[dict], out_path: Path, ablation: str, model_name:
     def _gs(rec):
         return rec.get("gen_stats") or {}
 
-    total_in_tok  = sum(_gs(r).get("total_input_tokens")  or 0 for r in records)
-    total_out_tok = sum(_gs(r).get("total_output_tokens") or 0 for r in records)
-    total_gen_ms  = sum(_gs(r).get("total_duration_ms")   or 0 for r in records)
+    ves_vals   = [r["ves"] for r in records if "ves" in r]
+    db_vals    = [r["db_runtime_s"] for r in records if r.get("db_runtime_s") is not None]
+    mean_ves   = round(sum(ves_vals) / len(ves_vals), 4) if ves_vals else ""
+    db_min     = round(min(db_vals), 3) if db_vals else ""
+    db_mean    = round(sum(db_vals) / len(db_vals), 3) if db_vals else ""
+    db_max     = round(max(db_vals), 3) if db_vals else ""
+    db_total   = round(sum(db_vals), 3) if db_vals else ""
+
+    total_in_tok   = sum(_gs(r).get("total_input_tokens")  or 0 for r in records)
+    total_out_tok  = sum(_gs(r).get("total_output_tokens") or 0 for r in records)
+    total_gen_ms   = sum(_gs(r).get("total_duration_ms")   or 0 for r in records)
     total_gen_wall = sum(r.get("gen_elapsed_s") or 0 for r in records)
 
     for row, (k, v) in enumerate([
-        ("Model",   model_name),
-        ("Ablation", ablation),
-        ("Total",    total),
-        ("Correct",  correct),
-        ("EX",       f"{ex:.1%}"),
-        ("Total input tokens",  total_in_tok),
-        ("Total output tokens", total_out_tok),
-        ("Total gen LLM (ms)",  round(total_gen_ms, 1)),
-        ("Total gen wall (s)",  round(total_gen_wall, 1)),
+        ("Model",                model_name),
+        ("Ablation",             ablation),
+        ("Total",                total),
+        ("Correct",              correct),
+        ("EX",                   f"{ex:.1%}"),
+        ("VES",                  mean_ves),
+        ("DB Runtime min (s)",   db_min),
+        ("DB Runtime mean (s)",  db_mean),
+        ("DB Runtime max (s)",   db_max),
+        ("DB Runtime total (s)", db_total),
+        ("Total input tokens",   total_in_tok),
+        ("Total output tokens",  total_out_tok),
+        ("Total gen LLM (ms)",   round(total_gen_ms, 1)),
+        ("Total gen wall (s)",   round(total_gen_wall, 1)),
     ], 1):
         ws2.cell(row=row, column=1, value=k).font = Font(bold=True)
         ws2.cell(row=row, column=2, value=v)
@@ -554,9 +586,10 @@ def main() -> None:
                     print(f"  optimizer error: {e}")
 
             # evaluate
-            exec_res, exec_err = _evaluate(final_sql, gold_sql, question=question)
+            exec_res, exec_err, ves, db_runtime_s = _evaluate(final_sql, gold_sql, question=question)
             status = "✓" if exec_res else "✗"
-            print(f"  {status} exec_res={exec_res}")
+            ves_str = f"  ves={ves:.4f}" if ves is not None else ""
+            print(f"  {status} exec_res={exec_res}{ves_str}")
 
             if exec_res:
                 correct_so_far += 1
@@ -569,6 +602,8 @@ def main() -> None:
                 "predicted_sql": final_sql,
                 "exec_res":      exec_res,
                 "exec_err":      exec_err,
+                "ves":           round(ves, 6),
+                "db_runtime_s":  round(db_runtime_s, 4) if db_runtime_s is not None else None,
                 "gen_elapsed_s": round(elapsed, 3),
                 "gen_stats":     gen_stats,
             }
@@ -640,6 +675,8 @@ def main() -> None:
                     "final_sql":          final_sql,
                     "exec_res":           exec_res,
                     "exec_err":           exec_err,
+                    "ves":                round(ves, 6),
+                    "db_runtime_s":       round(db_runtime_s, 4) if db_runtime_s is not None else None,
                     "gen_elapsed_s":      round(elapsed, 3),
                     "gen_stats":          gen_stats,
                 }, indent=2, ensure_ascii=False),
@@ -650,6 +687,7 @@ def main() -> None:
             _write_summary(
                 run_dir, args, model_short, dataset_path, timestamp,
                 total=i + 1, correct=correct_so_far, complete=False,
+                records=records,
             )
 
     finally:
@@ -664,10 +702,14 @@ def main() -> None:
     _write_summary(
         run_dir, args, model_short, dataset_path, timestamp,
         total=total, correct=correct, complete=True,
+        records=records,
     )
 
+    ves_vals = [r["ves"] for r in records if "ves" in r]
+    mean_ves = round(sum(ves_vals) / len(ves_vals), 4) if ves_vals else 0.0
+
     print(f"\n{'='*60}")
-    print(f"EX = {correct}/{total} = {ex:.1%}  (ablation={args.ablation}, fewshot={args.fewshot})")
+    print(f"EX = {correct}/{total} = {ex:.1%}  VES = {mean_ves:.4f}  (ablation={args.ablation}, fewshot={args.fewshot})")
     print(f"Results → {run_dir}")
 
     # XLSX
