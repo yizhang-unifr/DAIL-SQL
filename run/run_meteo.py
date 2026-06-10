@@ -228,6 +228,7 @@ def _write_summary(
         "ablation":        args.ablation,
         "model":           model_short,
         "fewshot":         args.fewshot,
+        "fewshot_k":       args.fewshot_k if args.fewshot else 0,
         "dataset":         str(dataset_path),
         "n_questions":     total,
         "n_correct":       correct,
@@ -383,6 +384,8 @@ def main() -> None:
     ap.add_argument("--ablation", choices=list(_ABLATION_FLAGS), default="full")
     ap.add_argument("--fewshot", action="store_true",
                     help="Inject few-shot examples from data/fewshot/questions.json")
+    ap.add_argument("--fewshot-k", type=int, default=3,
+                    help="Number of few-shot examples to inject (1–3, default 3)")
     ap.add_argument("--end", type=int, default=10,
                     help="Max questions to evaluate (-1 = all)")
     ap.add_argument("--indices", type=str, default="",
@@ -485,7 +488,7 @@ def main() -> None:
 
     # ── output directory ───────────────────────────────────────────────────────
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    fewshot_label = "fewshot" if args.fewshot else "no_fewshot"
+    fewshot_label = f"fewshot_k{args.fewshot_k}" if args.fewshot else "no_fewshot"
     run_dir = base_results / model_short / args.ablation / fewshot_label / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"Output → {run_dir}")
@@ -514,10 +517,15 @@ def main() -> None:
             # context lookup
             ctx = ctx_dict.get(q_key, {})
 
-            # fewshot lookup
+            # fewshot lookup — truncate to --fewshot-k examples
             fewshot_prompt = ""
             if args.fewshot:
-                fewshot_prompt = fewshot_dict.get(q_key, {}).get("prompt", "")
+                raw_prompt = fewshot_dict.get(q_key, {}).get("prompt", "")
+                if raw_prompt:
+                    header_match = re.match(r'(/\* Some SQL examples.*?\*/\n)', raw_prompt, re.DOTALL)
+                    blocks = re.findall(r'(/\* Answer the following:.*?\*/)', raw_prompt, re.DOTALL)
+                    header = header_match.group(1) if header_match else ""
+                    fewshot_prompt = header + "\n".join(blocks[:args.fewshot_k])
 
             # build prompt
             prompt = build_prompt(question, ctx, flags, fewshot_prompt, geo_anchor=args.geo_anchor)

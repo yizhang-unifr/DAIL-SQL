@@ -34,7 +34,7 @@ _COLUMN_CONTRACTS = {
 }
 
 
-def build_context_for_question(question: str) -> dict:
+def build_context_for_question(question: str, llm_adapter=None) -> dict:
     points = resolve_geo_from_places(question) or []
 
     ogf_json = ""
@@ -48,7 +48,7 @@ def build_context_for_question(question: str) -> dict:
         "geo_points":       points,
         "ogf_json":         ogf_json,
         "entity_hint":      build_entity_hint(question),
-        "semantic_hint":    build_semantic_hint(question),
+        "semantic_hint":    build_semantic_hint(question, llm_adapter=llm_adapter),
         "column_contracts": _COLUMN_CONTRACTS,
     }
 
@@ -61,7 +61,19 @@ def main() -> None:
     ap.add_argument("--output",
                     default=str(_DAIL_ROOT / "data" / "meteo_context.json"),
                     help="Output meteo_context.json path")
+    ap.add_argument("--llm-config", default=str(_PROJECT_ROOT / "config" / "models.yaml"),
+                    help="Path to LLM config YAML (used for landcover classification)")
     args = ap.parse_args()
+
+    # Load LLM adapter for landcover semantic hint classification
+    llm_adapter = None
+    try:
+        from meteo.llm_adapter import get_adapter
+        llm_adapter = get_adapter()
+        print("LLM adapter loaded for landcover classification")
+    except Exception as e:
+        print(f"[warn] LLM adapter unavailable — landcover hints will use generic fallback: {e}",
+              file=sys.stderr)
 
     items = json.loads(Path(args.questions).read_text())
     by_question: dict = {}
@@ -71,7 +83,7 @@ def main() -> None:
         if key in by_question:
             continue
         print(f"Processing: {q[:80]}")
-        by_question[key] = build_context_for_question(q)
+        by_question[key] = build_context_for_question(q, llm_adapter=llm_adapter)
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(
