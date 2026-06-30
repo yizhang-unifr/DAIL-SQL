@@ -174,8 +174,9 @@ def build_prompt(
 
     if flags["geo"]:
         pts = ctx.get("geo_points", [])
-        if pts:
-            blocks.append(format_geo_block(pts, mode=geo_anchor).rstrip())
+        bbox = ctx.get("geo_bbox", {})
+        if pts or bbox:
+            blocks.append(format_geo_block(pts, mode=geo_anchor, bbox=bbox).rstrip())
 
     if flags["ogf"]:
         ogf_block = _format_ogf_block(ctx.get("ogf_json", ""))
@@ -253,8 +254,15 @@ def _write_summary(
     )
 
 
-def _evaluate(predicted: str, gold: str, question: str | None = None) -> tuple[int, str, float, float | None]:
-    """Return (exec_res, exec_err, ves, db_runtime_s)."""
+def _evaluate(predicted: str, gold: str, question: str | None = None) -> tuple[int, str, float, float | None, Any, Any]:
+    """Return (exec_res, exec_err, ves, db_runtime_s, gold_result, predicted_result).
+
+    gold_result/predicted_result are the raw row lists (or an error string),
+    captured the same way OS-SQL's pipeline/evaluation.py does -- separately
+    from the exec_res/ves comparison -- so a future comparator-logic fix can
+    be re-applied offline (no DB re-execution) instead of requiring a full
+    rescore pass, the way OS-SQL's stored results already allow.
+    """
     try:
         from runner.database_manager import DatabaseManager
         resp = DatabaseManager.compare_sqls(
@@ -272,7 +280,18 @@ def _evaluate(predicted: str, gold: str, question: str | None = None) -> tuple[i
         exec_err   = str(e)
         ves        = 0.0
         db_runtime = None
-    return exec_res, exec_err, ves, db_runtime
+
+    from runner.execution import execute_sql
+    try:
+        gold_result = list(execute_sql(gold, fetch="all", timeout_s=180))
+    except Exception as e:
+        gold_result = f"gold_exec_error: {e}"
+    try:
+        predicted_result = list(execute_sql(predicted, fetch="all", timeout_s=30))
+    except Exception as e:
+        predicted_result = f"pred_exec_error: {e}"
+
+    return exec_res, exec_err, ves, db_runtime, gold_result, predicted_result
 
 
 # ─── XLSX export ──────────────────────────────────────────────────────────────
@@ -594,7 +613,9 @@ def main() -> None:
                     print(f"  optimizer error: {e}")
 
             # evaluate
-            exec_res, exec_err, ves, db_runtime_s = _evaluate(final_sql, gold_sql, question=question)
+            exec_res, exec_err, ves, db_runtime_s, gold_result, predicted_result = _evaluate(
+                final_sql, gold_sql, question=question
+            )
             status = "✓" if exec_res else "✗"
             ves_str = f"  ves={ves:.4f}" if ves is not None else ""
             print(f"  {status} exec_res={exec_res}{ves_str}")
@@ -612,13 +633,15 @@ def main() -> None:
                 "exec_err":      exec_err,
                 "ves":           round(ves, 6),
                 "db_runtime_s":  round(db_runtime_s, 4) if db_runtime_s is not None else None,
+                "gold_result":      gold_result,
+                "predicted_result": predicted_result,
                 "gen_elapsed_s": round(elapsed, 3),
                 "gen_stats":     gen_stats,
             }
             records.append(rec)
 
             # ── stream-write after every question ─────────────────────────────
-            results_fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            results_fh.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
             results_fh.flush()
 
             preds_fh.write(final_sql + "\n")

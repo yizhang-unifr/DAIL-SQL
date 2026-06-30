@@ -25,7 +25,8 @@ _DEFAULT_STATEMENT_TIMEOUT_S = 600
 _DEFAULT_COMPARE_TIMEOUT_S = _DEFAULT_STATEMENT_TIMEOUT_S + 60
 
 _NUMERIC_TYPES = (int, float, Decimal)
-_EPS = 1e-6
+_ABS_TOL = 1e-6
+_REL_TOL = 1e-6
 
 # ---------------------------------------------------------------------------
 # Gold SQL cache (optional — injected at startup by run_meteo.py)
@@ -54,14 +55,27 @@ def set_gold_cache(cache: Any) -> None:
 
 
 def _val_approx_eq(a, b) -> bool:
-    """True if a == b, or both are numeric and differ by less than _EPS."""
+    """True if a == b, both numeric within tolerance, or equal once stringified.
+
+    Kept in sync with src/OpenSearch-SQL/src/runner/execution.py's version --
+    see that file's docstring for the two bugs this guards against:
+    (1) JSON gold-cache values that are non-JSON-native (date, Decimal) come
+    back as plain str (cache write uses default=str), so a string-form
+    fallback is needed; (2) a purely absolute epsilon is too strict for
+    large-magnitude aggregates (e.g. SUM() reaching 1e11), so tolerance is
+    math.isclose-style (combined relative + absolute).
+    """
     if a == b:
         return True
     if isinstance(a, _NUMERIC_TYPES) and isinstance(b, _NUMERIC_TYPES):
         try:
-            return abs(float(a) - float(b)) < _EPS
+            fa, fb = float(a), float(b)
+            tol = max(_REL_TOL * max(abs(fa), abs(fb)), _ABS_TOL)
+            return abs(fa - fb) <= tol
         except (TypeError, ValueError):
             pass
+    if isinstance(a, str) != isinstance(b, str):
+        return str(a) == str(b)
     return False
 
 

@@ -25,24 +25,36 @@ for _p in (_PLACES_DIR / "cities").glob("*.json") if (_PLACES_DIR / "cities").ex
 _SORTED_NAMES = sorted(_INDEX, key=len, reverse=True)
 
 
-def resolve_geo_from_places(question: str) -> list[dict] | None:
-    """Return [{"lat": ..., "lon": ...}, ...] for the first place found in question."""
+def resolve_geo_from_places(question: str) -> dict | None:
+    """Return {"points": [...], "bbox": {...}} for the first place found in question.
+
+    "bbox" is the authoritative administrative-boundary extent (results.bounds in
+    the place JSON), independent of the point list — a single-point place still
+    has a real (non-zero-width) administrative bbox.
+    """
     q = question.lower()
     for name in _SORTED_NAMES:
         if name in q:
             data = json.loads(_INDEX[name].read_text())
-            return data.get("results", {}).get("points", [])
+            results = data.get("results", {})
+            return {
+                "points": results.get("points", []),
+                "bbox": results.get("bounds") or {},
+            }
     return None
 
 
-def format_geo_block(points: list[dict], mode: str = "points") -> str:
-    """Format geo points as a SQL comment block.
+def format_geo_block(points: list[dict], mode: str = "points", bbox: dict | None = None) -> str:
+    """Format geo points (or bbox) as a SQL comment block.
 
-    Uses latitude/longitude to match the meteo DB column names.
+    Uses latitude/longitude to match the meteo DB column names. In "bbox" mode,
+    prefers the authoritative administrative bbox (rounded to 1 decimal place,
+    matching the gold SQL cache's convention) over a point-derived min/max,
+    which is structurally narrower for single-point places.
     """
-    if not points:
-        return ""
     if mode == "points":
+        if not points:
+            return ""
         coords = ", ".join(
             f"({p['lat']}, {p['lon']})" for p in points
         )
@@ -53,10 +65,26 @@ def format_geo_block(points: list[dict], mode: str = "points") -> str:
             f"   (ROUND(CAST(latitude AS DECIMAL), 1), ROUND(CAST(longitude AS DECIMAL), 1)) IN ({coords}) */\n"
         )
     else:
-        lats = [float(p["lat"]) for p in points]
-        lons = [float(p["lon"]) for p in points]
+        if bbox:
+            minlat = bbox.get("minlat") or bbox.get("min_lat")
+            maxlat = bbox.get("maxlat") or bbox.get("max_lat")
+            minlon = bbox.get("minlon") or bbox.get("min_lon")
+            maxlon = bbox.get("maxlon") or bbox.get("max_lon")
+            if None in (minlat, maxlat, minlon, maxlon):
+                bbox = None
+        if bbox:
+            minlat, maxlat, minlon, maxlon = (
+                round(float(v), 1) for v in (minlat, maxlat, minlon, maxlon)
+            )
+        elif points:
+            lats = [float(p["lat"]) for p in points]
+            lons = [float(p["lon"]) for p in points]
+            minlat, maxlat = round(min(lats), 1), round(max(lats), 1)
+            minlon, maxlon = round(min(lons), 1), round(max(lons), 1)
+        else:
+            return ""
         return (
             f"/* Geographic filter (bbox mode) — coordinates are rounded to 1 decimal place.\n"
-            f"   ROUND(CAST(latitude AS DECIMAL), 1) BETWEEN {min(lats)} AND {max(lats)}\n"
-            f"   ROUND(CAST(longitude AS DECIMAL), 1) BETWEEN {min(lons)} AND {max(lons)} */\n"
+            f"   ROUND(CAST(latitude AS DECIMAL), 1) BETWEEN {minlat} AND {maxlat}\n"
+            f"   ROUND(CAST(longitude AS DECIMAL), 1) BETWEEN {minlon} AND {maxlon} */\n"
         )

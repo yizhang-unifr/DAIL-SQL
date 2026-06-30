@@ -35,7 +35,9 @@ _COLUMN_CONTRACTS = {
 
 
 def build_context_for_question(question: str, llm_adapter=None) -> dict:
-    points = resolve_geo_from_places(question) or []
+    geo = resolve_geo_from_places(question) or {}
+    points = geo.get("points", [])
+    bbox = geo.get("bbox", {})
 
     ogf_json = ""
     try:
@@ -46,6 +48,7 @@ def build_context_for_question(question: str, llm_adapter=None) -> dict:
 
     return {
         "geo_points":       points,
+        "geo_bbox":         bbox,
         "ogf_json":         ogf_json,
         "entity_hint":      build_entity_hint(question),
         "semantic_hint":    build_semantic_hint(question, llm_adapter=llm_adapter),
